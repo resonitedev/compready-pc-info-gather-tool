@@ -1,4 +1,4 @@
-# System Information Exporter
+# PC Info Gather Tool
 
 This application retrieves system information using Windows Management Instrumentation (WMI) and exports it to a JSON file.
 
