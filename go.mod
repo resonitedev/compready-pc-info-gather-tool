@@ -1,6 +1,6 @@
 module github.com/resonite/compready/pc-info-gatherer
 
-go 1.22.3
+go 1.22
 
 require (
 	github.com/yusufpapurcu/wmi v1.2.4
