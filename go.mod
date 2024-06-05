@@ -4,7 +4,7 @@ go 1.22
 
 require (
 	github.com/yusufpapurcu/wmi v1.2.4
-	golang.org/x/sys v0.0.0-20190916202348-b4ddaad3f8a3
+	golang.org/x/sys v0.1.0
 )
 
 require github.com/go-ole/go-ole v1.2.6 // indirect
