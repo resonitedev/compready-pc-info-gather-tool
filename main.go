@@ -4,16 +4,37 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/yusufpapurcu/wmi"
 	"golang.org/x/sys/windows"
 )
 
+type SystemInfo struct {
+	Motherboard     string          `json:"motherboard"`
+	Gpu             string          `json:"gpu"`
+	Cpu             string          `json:"cpu"`
+	Memory          Memory          `json:"memory"`
+	OperatingSystem OperatingSystem `json:"operatingSystem"`
+}
+
+type Memory struct {
+	Type       string    `json:"type"`
+	Speed      int       `json:"speed"`
+	Capacities [4]string `json:"capacities"`
+	Name       string    `json:"name"`
+}
+
+type OperatingSystem struct {
+	Version string `json:"version"`
+	Patch   string `json:"patch"`
+}
+
 func main() {
+	var systemInfo SystemInfo
 	fmt.Println("Getting system information from WMI")
 	// Query WMI for motherboard information
-	var pcParts []PCPart
 	var baseboard []Win32Baseboard
 	if err := wmi.Query("SELECT * FROM Win32_BaseBoard", &baseboard); err != nil {
 		fmt.Println("Error querying Win32_BaseBoard:", err)
@@ -21,10 +42,7 @@ func main() {
 	}
 	fmt.Println("Got motherboard information")
 	for _, board := range baseboard {
-		pcParts = append(pcParts, PCPart{
-			Type: "Motherboard",
-			Info: fmt.Sprintf("%s, %s", board.Manufacturer, board.Product),
-		})
+		systemInfo.Motherboard = fmt.Sprintf("%s, %s", board.Manufacturer, board.Product)
 	}
 
 	// Query WMI for memory information
@@ -36,18 +54,40 @@ func main() {
 	fmt.Println("Got memory information")
 	var (
 		manufacturer string
-		capacity     uint64
 		speed        uint32
 		voltage      uint16
 		partNumber   string
+		memType      string
 	)
 
+	capacities := [4]string{"N/A", "N/A", "N/A", "N/A"}
+
 	for _, mem := range memory {
+		fmt.Println(fmt.Sprintf("Bank: %v | Locator: %v | Speed: %v | Voltage: %v | Part Number: %v", mem.BankLabel, mem.DeviceLocator, mem.ConfiguredClockSpeed, mem.ConfiguredClockSpeed, mem.PartNumber))
+		switch mem.BankLabel {
+		case "P0 CHANNEL A":
+			if mem.DeviceLocator == "DIMM 1" {
+				capacities[0] = fmt.Sprintf("%v GB", convertBytesToGB(mem.Capacity))
+			} else if mem.DeviceLocator == "DIMM 2" {
+				capacities[1] = fmt.Sprintf("%v GB", convertBytesToGB(mem.Capacity))
+			}
+		case "P0 CHANNEL B":
+			if mem.DeviceLocator == "DIMM 1" {
+				capacities[2] = fmt.Sprintf("%v GB", convertBytesToGB(mem.Capacity))
+			} else if mem.DeviceLocator == "DIMM 2" {
+				capacities[3] = fmt.Sprintf("%v GB", convertBytesToGB(mem.Capacity))
+			}
+		case "BANK 0", "ChannelA-DIMM0", "Node0":
+			capacities[0] = fmt.Sprintf("%v GB", convertBytesToGB(mem.Capacity))
+		case "BANK 1", "ChannelA-DIMM1", "Node1":
+			capacities[1] = fmt.Sprintf("%v GB", convertBytesToGB(mem.Capacity))
+		case "BANK 2", "ChannelB-DIMM0":
+			capacities[2] = fmt.Sprintf("%v GB", convertBytesToGB(mem.Capacity))
+		case "BANK 3", "ChannelB-DIMM1":
+			capacities[3] = fmt.Sprintf("%v GB", convertBytesToGB(mem.Capacity))
+		}
 		if manufacturer != mem.Manufacturer {
 			manufacturer = mem.Manufacturer
-		}
-		if capacity != mem.Capacity {
-			capacity = mem.Capacity
 		}
 		if speed != mem.ConfiguredClockSpeed {
 			speed = mem.ConfiguredClockSpeed
@@ -58,12 +98,20 @@ func main() {
 		if partNumber != mem.PartNumber {
 			partNumber = mem.PartNumber
 		}
+		switch mem.SMBIOSMemoryType {
+		case 26:
+			memType = "DDR4"
+		case 34:
+			memType = "DDR5"
+		}
 	}
 
-	pcParts = append(pcParts, PCPart{
-		Type: "RAM",
-		Info: fmt.Sprintf("%s %s, %dx%vGB, %d MHz (%v Volts)", manufacturer, strings.TrimSpace(partNumber), len(memory), convertBytesToGB(capacity), speed, convertVolts(float64(voltage))),
-	})
+	systemInfo.Memory = Memory{
+		Type:       memType,
+		Speed:      int(speed),
+		Name:       strings.TrimSpace(fmt.Sprintf("%v - %v", manufacturer, partNumber)),
+		Capacities: capacities,
+	}
 
 	// Query WMI for CPU information
 	var cpu []Win32Processor
@@ -73,10 +121,7 @@ func main() {
 	}
 	fmt.Println("Got CPU information")
 	for _, processor := range cpu {
-		pcParts = append(pcParts, PCPart{
-			Type: "CPU",
-			Info: fmt.Sprintf(" %s", strings.TrimSpace(processor.Name)),
-		})
+		systemInfo.Cpu = fmt.Sprintf(" %s", strings.TrimSpace(processor.Name))
 	}
 
 	// Query WMI for GPU information
@@ -87,19 +132,16 @@ func main() {
 	}
 	fmt.Println("Got GPU information")
 	for _, video := range gpu {
-		pcParts = append(pcParts, PCPart{
-			Type: "GPU",
-			Info: fmt.Sprintf("%s, %s", video.Name, video.DriverVersion),
-		})
+		systemInfo.Gpu = fmt.Sprintf("%s, %s", video.Name, video.DriverVersion)
 	}
 
 	maj, _, patch := windows.RtlGetNtVersionNumbers()
-	pcParts = append(pcParts, PCPart{
-		Type: "Windows Version",
-		Info: fmt.Sprintf("%vv%v", maj, patch),
-	})
+	systemInfo.OperatingSystem = OperatingSystem{
+		Version: strconv.Itoa(int(maj)),
+		Patch:   strconv.Itoa(int(patch)),
+	}
 
-	jsonParts, _ := json.Marshal(pcParts)
+	jsonParts, _ := json.Marshal(systemInfo)
 	fmt.Println("System JSON Information")
 	fmt.Println(string(jsonParts))
 
@@ -127,10 +169,6 @@ func convertBytesToGB(bytes uint64) int {
 	return int(gigabytes)
 }
 
-func convertVolts(mVolts float64) float64 {
-	return mVolts / 1000
-}
-
 type Win32Baseboard struct {
 	Manufacturer string
 	Product      string
@@ -152,6 +190,7 @@ type Win32PhysicalMemory struct {
 	Speed                uint32
 	TotalWidth           uint16
 	TypeDetail           uint16
+	SMBIOSMemoryType     uint64
 }
 
 type Win32Processor struct {
