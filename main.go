@@ -42,6 +42,7 @@ func main() {
 	}
 	fmt.Println("Got motherboard information")
 	for _, board := range baseboard {
+		fmt.Println(fmt.Sprintf("%s, %s", board.Manufacturer, board.Product))
 		systemInfo.Motherboard = fmt.Sprintf("%s, %s", board.Manufacturer, board.Product)
 	}
 
@@ -119,9 +120,11 @@ func main() {
 		fmt.Println("Error querying Win32_Processor:", err)
 		return
 	}
+
 	fmt.Println("Got CPU information")
 	for _, processor := range cpu {
-		systemInfo.Cpu = fmt.Sprintf(" %s", strings.TrimSpace(processor.Name))
+		fmt.Println(fmt.Sprintf("%s", strings.TrimSpace(processor.Name)))
+		systemInfo.Cpu = fmt.Sprintf("%s", strings.TrimSpace(processor.Name))
 	}
 
 	// Query WMI for GPU information
@@ -130,9 +133,24 @@ func main() {
 		fmt.Println("Error querying Win32_VideoController:", err)
 		return
 	}
+
 	fmt.Println("Got GPU information")
-	for _, video := range gpu {
+
+	switch len(gpu) {
+	case 0:
+		fmt.Println("No GPU information")
+		return
+	case 1:
+		video := gpu[0]
 		systemInfo.Gpu = fmt.Sprintf("%s, %s", video.Name, video.DriverVersion)
+		fmt.Println(fmt.Sprintf("%s, %s", video.Name, video.DriverVersion))
+	default:
+		fmt.Println(fmt.Sprintf("GPU's found: %v", len(gpu)))
+		video := gpu[0]
+		systemInfo.Gpu = fmt.Sprintf("%s, %s", video.Name, video.DriverVersion)
+		for _, controller := range gpu[1:] {
+			fmt.Println(fmt.Sprintf("Other GPU Found %s, %s", controller.Name, controller.DriverVersion))
+		}
 	}
 
 	maj, _, patch := windows.RtlGetNtVersionNumbers()
