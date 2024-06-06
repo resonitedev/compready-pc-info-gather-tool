@@ -155,7 +155,7 @@ func main() {
 
 	maj, _, patch := windows.RtlGetNtVersionNumbers()
 	systemInfo.OperatingSystem = OperatingSystem{
-		Version: strconv.Itoa(int(maj)),
+		Version: fmt.Sprintf("Windows %v", strconv.Itoa(int(maj))),
 		Patch:   strconv.Itoa(int(patch)),
 	}
 
