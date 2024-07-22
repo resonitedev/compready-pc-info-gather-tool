@@ -27,12 +27,12 @@ jobs:
 
     - name: Build
       run: |
-        GOOS=windows GOARCH=amd64 go build -o main.exe ./...
+        GOOS=windows GOARCH=amd64 go build -o system-info-gather.exe ./...
 
     - name: Release
       uses: softprops/action-gh-release@v2
       if: startsWith(github.ref, 'refs/tags/')
       with:
         files: |
-          main.exe
+          system-info-gather.exe
           LICENSE
